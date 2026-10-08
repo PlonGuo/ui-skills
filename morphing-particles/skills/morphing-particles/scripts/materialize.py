@@ -18,7 +18,7 @@ def main():
         shutil.copytree(template, destination)
     else:
         destination.mkdir(parents=True)
-        for name in ['particle-engine.js', 'LICENSE']:
+        for name in ['particle-engine.js', 'LICENSE', 'NOTICE.md']:
             shutil.copyfile(template / name, destination / name)
     print(f'Created {args.mode}: {destination}')
 

@@ -10,7 +10,7 @@
 python3 <skill-dir>/scripts/materialize.py --destination <project>/src/effects/morphing-particles --mode runtime
 ```
 
-输出只有 `particle-engine.js` 和 `LICENSE`，默认图形无外部资源依赖。使用项目已有构建工具，保留许可证；不要再引入原站的 `vendor` 或 PNG。
+输出包含 `particle-engine.js`、`LICENSE` 和 `NOTICE.md`，默认图形无外部资源依赖。使用项目已有构建工具，保留许可证与相关说明；不要再引入原站的 `vendor` 或 PNG。
 
 ## 一个接入示例
 

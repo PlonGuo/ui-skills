@@ -7,6 +7,12 @@ description: Use when adding an image-shaped morphing particle background, Antig
 
 用独立实现的 Canvas 2D 引擎，在文案背后绘制流动粒子、大括号或立方体，并响应悬停与键盘聚焦。
 
+## 来源与许可声明
+
+本技能及所附代码是独立项目，不是参考网站的官方组件或授权复制品。阅读 [项目声明](NOTICE.md)，并在交付时保留许可证和相关说明；不要用“学习用途”“AI 辅助”“独立实现”或“MIT”承诺无侵权或当然免责。不要声称已完成净室开发认证或专业法律审查。
+
+新增图片、字体、品牌标识或代码时，核对相应权利与许可；MIT 不授予第三方商标或素材权利。合法的商业使用不因这些说明被额外禁止，许可条件仍以 MIT 原文为准。
+
 ## 接入方式
 
 先阅读目标页面和调用位置，沿用现有框架、目录结构、包管理器和设计变量。
@@ -21,6 +27,8 @@ python3 <skill-dir>/scripts/materialize.py --destination <new-directory> --mode 
 ```
 
 独立页使用 `--mode standalone`，生成后运行 `pnpm dev`。脚本不覆盖现有目录。无需安装 Three.js、GSAP 或其他粒子库。
+
+两种输出都包含 `LICENSE` 和 `NOTICE.md`，让接入后的项目能查阅实现来源和使用边界。
 
 ## 关键约束
 
