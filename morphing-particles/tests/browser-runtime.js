@@ -1,0 +1,40 @@
+const { mountMorphingParticles } = await import('/particle-engine.js');
+const host = document.querySelector('.background');
+const trigger = document.querySelector('.content');
+const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
+const assert = (ok, message) => { if (!ok) throw new Error(message); };
+assert(document.readyState === 'complete', 'Test must mount after document load');
+window.scrollTo(0, 0);
+const effect = mountMorphingParticles(host, { trigger });
+await effect.ready; await wait(250);
+assert(host.querySelectorAll('canvas').length === 1, 'Missing runtime canvas');
+const canvas = host.querySelector('canvas');
+const before = canvas.toDataURL(); await wait(180);
+assert(before !== canvas.toDataURL(), 'Runtime should animate');
+document.querySelector('.card').style.width = '300px'; await wait(200);
+assert(canvas.width === 300 * Math.min(window.devicePixelRatio, 2), 'Container resize did not resize canvas');
+window.scrollTo(0, 900); await wait(100);
+const paused = canvas.toDataURL(); await wait(200);
+assert(paused === canvas.toDataURL(), 'Offscreen rendering should pause');
+window.scrollTo(0, 0); await wait(250);
+assert(paused !== canvas.toDataURL(), 'Rendering should resume');
+effect.dispose(); effect.dispose();
+assert(!host.querySelector('canvas'), 'Dispose should remove canvas');
+const stopped = canvas.toDataURL(); await wait(150);
+assert(stopped === canvas.toDataURL(), 'Disposed instance should stop drawing');
+const next = mountMorphingParticles(host, { trigger }); await next.ready;
+assert(host.querySelectorAll('canvas').length === 1, 'Remount produced duplicate canvases'); next.dispose();
+const early = mountMorphingParticles(host, { trigger }); early.dispose(); await early.ready;
+assert(!host.querySelector('canvas'), 'Early dispose should not restore canvas');
+const invalid = mountMorphingParticles(host, { imageUrl: '/missing-image.png' });
+let rejected = false; try { await invalid.ready; } catch { rejected = true; }
+assert(rejected && !host.querySelector('canvas'), 'Image error should reject and clean up');
+const pending = mountMorphingParticles(host, { imageUrl: '/never-loads.png' }); pending.dispose();
+let aborted = false; try { await pending.ready; } catch (error) { aborted = error.name === 'AbortError'; }
+assert(aborted && !host.querySelector('canvas'), 'Pending load should abort on disposal');
+const imageUrl = 'data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100"><circle cx="50" cy="50" r="35" fill="black"/></svg>');
+const image = mountMorphingParticles(host, { imageUrl }); await image.ready; await wait(250);
+assert(host.querySelector('canvas'), 'Independent custom image should load'); image.dispose();
+let zeroSize = false; try { mountMorphingParticles(document.createElement('div')); } catch { zeroSize = true; }
+assert(zeroSize, 'Zero-size container should fail clearly');
+return { status: 'PASS', tests: ['late mount', 'continuous frames', 'resize', 'offscreen pause/resume', 'dispose stops drawing', 'remount', 'early disposal', 'image failure', 'abort pending image', 'custom image', 'zero-size container'] };

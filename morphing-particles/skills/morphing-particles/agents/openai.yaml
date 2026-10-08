@@ -1,0 +1,4 @@
+interface:
+  display_name: "图形变换粒子 UI"
+  short_description: "复用 Antigravity 风格的图形粒子背景、悬停动画及响应式双栏 UI"
+  default_prompt: "使用 $morphing-particles，在当前项目中加入图形变换粒子背景，沿用项目布局和技术栈。"

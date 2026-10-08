@@ -1,0 +1,32 @@
+const cards = [...document.querySelectorAll('[data-solution-section]')];
+if (cards.length !== 2) throw new Error('Expected developer and organization cards');
+await new Promise(resolve => setTimeout(resolve, 3500));
+const results = [];
+for (const card of cards) {
+  card.scrollIntoView({block:'center'});
+  await new Promise(resolve => setTimeout(resolve, 250));
+  const component = card.querySelector('[data-morphing-particles-component]');
+  if (component?.dataset.state !== 'ready') throw new Error('Particle simulation did not finish loading');
+  const canvas = component.querySelector('canvas');
+  if (!canvas || canvas.width === 0 || canvas.height === 0) throw new Error('Missing visible particle canvas');
+  const rect = card.getBoundingClientRect();
+  if (rect.width <= 0 || rect.height <= 0) throw new Error('Card has no layout');
+  const copy = document.createElement('canvas');
+  copy.width = canvas.width; copy.height = canvas.height;
+  const ctx = copy.getContext('2d');
+  ctx.drawImage(canvas, 0, 0);
+  const pixels = ctx.getImageData(0, 0, copy.width, copy.height).data;
+  let painted = 0;
+  for (let i = 3; i < pixels.length; i += 4) if (pixels[i] > 0 && (pixels[i - 3] < 245 || pixels[i - 2] < 245 || pixels[i - 1] < 245)) painted++;
+  if (painted < 100) throw new Error('Particle canvas is blank');
+  const before = canvas.toDataURL();
+  await new Promise(resolve => setTimeout(resolve, 180));
+  if (canvas.toDataURL() === before) throw new Error('Particle simulation is not animating');
+  results.push({title: card.querySelector('.header').textContent, painted, width:rect.width, height:rect.height});
+}
+if (document.documentElement.scrollWidth > innerWidth) throw new Error('Horizontal overflow');
+const rects = cards.map(c => c.getBoundingClientRect());
+if (innerWidth > 1024 && Math.abs(rects[0].top - rects[1].top) > 1) throw new Error('Desktop cards should be side by side');
+if (innerWidth <= 1024 && rects[1].top < rects[0].bottom - 1) throw new Error('Mobile cards should be stacked');
+window.scrollTo(0,0);
+return {status:'PASS', viewport:[innerWidth,innerHeight], cards:results};

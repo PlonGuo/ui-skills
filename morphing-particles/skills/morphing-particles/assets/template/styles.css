@@ -1,0 +1,30 @@
+/* Independent presentation rules. Copyright (c) 2026 PlonGuo, MIT. */
+* { box-sizing: border-box; }
+body { margin: 0; color: #121317; background: #fff; font-family: Arial, Helvetica, sans-serif; -webkit-font-smoothing: antialiased; }
+.try-solutions-section { --page-margin: 72px; border-top: 1px solid #2122260f; padding: 55px var(--page-margin); width: 100%; overflow: clip; }
+.section-wrapper { display: flex; width: 100%; max-width: 1600px; margin: auto; }
+.solution-section { position: relative; width: 50%; min-width: 0; }
+.particle-background, .particle-container { position: absolute; inset: 0; overflow: hidden; }
+.try-solutions-content { position: relative; z-index: 1; display: flex; flex-direction: column; align-items: center; text-align: center; padding: 250px 32px; }
+.try-solution-label { margin: 0 0 18px; padding: 4px 8px; border: 1px solid #2122260f; border-radius: 4px; background: #ffffffdb; backdrop-filter: blur(10px); font-size: 13px; line-height: 18px; }
+.header, .subhead { margin: 0; font-size: 42px; font-weight: 400; line-height: 1.04; letter-spacing: -1.4px; }
+.subhead { color: #45474d; margin-bottom: 32px; }
+.solutions-cta { padding: 8px 0; }
+.button { display: inline-flex; align-items: center; justify-content: center; border: 1px solid transparent; border-radius: 999px; padding: 10px 24px; font-size: 17.5px; line-height: 25px; text-decoration: none; transition: background .15s; }
+.button-primary { color: #fff; background: #121317; }
+.button-primary:hover { background: #2f3034; }
+.button-secondary { color: #121317; background: #b7bfd919; border-color: #2122260f; backdrop-filter: blur(6px); }
+.button-secondary:hover { background: #f0f1f5; }
+.button:focus-visible { outline: 2px solid #346bf1; outline-offset: 4px; }
+@media (max-width: 1024px) {
+  .try-solutions-section { --page-margin: 40px; }
+  .section-wrapper { flex-direction: column; }
+  .solution-section { width: 100%; }
+  .try-solutions-content { padding: 108px 16px; }
+  .header, .subhead { font-size: 32px; letter-spacing: -.9px; }
+}
+@media (max-width: 767px) {
+  .try-solutions-section { --page-margin: 16px; }
+  .header, .subhead { font-size: 26px; letter-spacing: -.8px; }
+}
+@media (prefers-reduced-motion: reduce) { .button { transition: none; } }
