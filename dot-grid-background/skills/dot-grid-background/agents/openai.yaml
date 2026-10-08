@@ -1,0 +1,4 @@
+interface:
+  display_name: "Dot grid background"
+  short_description: "创建深色点阵背景和局部鼠标颜色响应"
+  default_prompt: "使用 $dot-grid-background，在当前项目中加入一个稳定的深色 dot grid 背景，并沿用项目现有布局。"

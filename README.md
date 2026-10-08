@@ -7,6 +7,7 @@
 | 效果 | 展示页 | 技能 |
 | --- | --- | --- |
 | 图形变换粒子背景 | [Morphing particles](morphing-particles/README.md) | [Skill](morphing-particles/skills/morphing-particles/SKILL.md) |
+| 深色点阵背景 | [Dot grid background](dot-grid-background/README.md) | [Skill](dot-grid-background/skills/dot-grid-background/SKILL.md) |
 
 ## 运行
 
@@ -20,6 +21,8 @@ pnpm dev
 ## 复用
 
 将 `morphing-particles/skills/morphing-particles` 复制到目标项目的 `.agents/skills/morphing-particles`，然后调用 `$morphing-particles`。
+
+将 `dot-grid-background/skills/dot-grid-background` 复制到目标项目的 `.agents/skills/dot-grid-background`，然后调用 `$dot-grid-background`。该 skill 提供独立预览模板和可挂载的 `mountDotGridBackground()` runtime 模块。
 
 技能包含独立页面模板、可显式挂载和卸载的粒子引擎、实现原理、参数说明和参考截图。默认图形由公式生成，不需要 PNG、外部字体、Three.js 或 GSAP。
 
