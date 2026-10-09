@@ -1,161 +1,89 @@
-/**
- * Independent motion integration for the drifting-dot background.
- * Copyright (c) 2026 PlonGuo. Released under the MIT License.
- *
- * Each dot has a home and a weak spring pulling it back. Without that
- * spring the motion would be a random walk: displacement variance grows
- * without bound, so dots get swept off screen and the field ends up with
- * piled edges and an empty middle. With it, each dot orbits a small
- * neighbourhood — which is what floating debris in water actually does.
- *
- * The pointer is handled in two layers on purpose:
- *   - a repulsion force, which produces the natural pushed-aside feel
- *   - a hard position correction, which makes entry impossible
- * Force alone is not enough: the pointer teleports between frames and
- * dots carry their own velocity, so a fast sweep can overtake a dot.
- * Correction alone would look stiff, like sliding along a circular
- * sticker, with none of the viscous feel of water.
- */
+import { simplex3D } from './noise-field.js';
 
-import { createNoise2D, fbm } from './noise-field.js';
-
-const noise = createNoise2D(20261009);
-const MAX_DT = 0.05;
-
-/** Remove the component of velocity pointing into the field. */
-function cancelInward(point, nx, ny) {
-  const inward = point.vx * nx + point.vy * ny;
-  if (inward < 0) {
-    point.vx -= inward * nx;
-    point.vy -= inward * ny;
-  }
+export const MAX_DT = 0.05;
+export const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
+export function smoothstep(a, b, value) {
+  const t = clamp((value - a) / (b - a), 0, 1);
+  return t * t * (3 - 2 * t);
+}
+export function seededRandom(seed) {
+  let state = seed >>> 0;
+  return () => {
+    state += 0x6D2B79F5;
+    let t = Math.imul(state ^ (state >>> 15), state | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+export function createRingState(seed = 20261009) {
+  const random = seededRandom(seed);
+  return { x: 0, y: 0, radius: 0.175, noise: Array.from({ length: 256 }, random) };
+}
+function idleNoise(table, time) {
+  const floor = Math.floor(time);
+  const i = ((floor % 255) + 255) % 255;
+  const t = smoothstep(0, 1, time - floor);
+  return (table[i] + (table[(i + 1) % 255] - table[i]) * t - 0.5) * 2;
 }
 
-/**
- * Push a point out of the pointer's repulsion circle without letting it
- * leave the container.
- *
- * The plain radial projection is not enough on its own. When the pointer
- * sits near an edge, the projected point lands outside the box; clamping
- * it back inside would place the dot straight back within the radius, so
- * the "cannot get close" guarantee would silently fail exactly where the
- * pointer spends a lot of its time. Instead we slide the dot along the
- * circle to the nearest angle that is still inside the box — which is what
- * a dot squeezed between the pointer and a wall physically does.
- */
-function resolveOutOfField(point, pointer, radius, width, height) {
-  const dx = point.x - pointer.x;
-  const dy = point.y - pointer.y;
-  const distance = Math.hypot(dx, dy);
-  if (distance >= radius) return;
-
-  // Radial projection — the common case, away from the edges.
-  if (distance > 1e-6) {
-    const nx = dx / distance;
-    const ny = dy / distance;
-    const px = pointer.x + nx * radius;
-    const py = pointer.y + ny * radius;
-    if (px >= 0 && px <= width && py >= 0 && py <= height) {
-      point.x = px;
-      point.y = py;
-      cancelInward(point, nx, ny);
-      return;
-    }
-  }
-
-  // Squeezed against an edge: walk outward from the radial direction in
-  // both directions until an angle lands back inside the container.
-  const baseAngle = distance > 1e-6 ? Math.atan2(dy, dx) : 0;
-  const STEPS = 64;
-  for (let i = 1; i <= STEPS; i += 1) {
-    for (const sign of [-1, 1]) {
-      const angle = baseAngle + sign * (i / STEPS) * Math.PI;
-      const nx = Math.cos(angle);
-      const ny = Math.sin(angle);
-      const px = pointer.x + nx * radius;
-      const py = pointer.y + ny * radius;
-      if (px >= 0 && px <= width && py >= 0 && py <= height) {
-        point.x = px;
-        point.y = py;
-        cancelInward(point, nx, ny);
-        return;
-      }
-    }
-  }
-
-  // No angle fits: the container is smaller than the field, so the two
-  // constraints genuinely conflict. The box wins here because leaving the
-  // container is the more visible defect.
-  point.x = Math.min(width, Math.max(0, point.x));
-  point.y = Math.min(height, Math.max(0, point.y));
+// The reference camera has a 40 degree field of view, sits at z=3.1,
+// and displays a plane scaled by 5. Coordinates here are in that plane,
+// which keeps the ring circular at every canvas aspect ratio.
+export function projectionScale(height) {
+  return height * 5 / (2 * Math.tan(Math.PI / 9) * 3.1);
 }
 
-export function stepPoints(points, params, dt) {
-  const {
-    width, height, time,
-    driftSpeed, noiseScale, detailScale, detailWeight,
-    homeStiffness, damping, repelRadius, repelStrength, maxSpeed,
-    pointer,
-  } = params;
-
-  const step = Math.min(Math.max(dt, 0), MAX_DT);
-
+export function stepRingPoints(points, ring, { time, width, height, settings, pointer }, dt) {
+  const step = clamp(dt, 0, MAX_DT);
+  if (step === 0) return;
+  const frames = step * 60;
+  const nx = idleNoise(ring.noise, time * 0.66 + 94.234);
+  const ny = idleNoise(ring.noise, time * 0.75 + 21.028);
+  const projection = projectionScale(Math.max(1, height));
+  let targetX = nx * 0.2, targetY = ny * 0.1;
+  if (pointer.active) {
+    targetX = (pointer.x - width / 2) / projection * 0.875 + nx * 0.1;
+    targetY = (height / 2 - pointer.y) / projection * 0.875 + ny * 0.1;
+  }
+  const follow = 1 - Math.exp(-(pointer.active ? settings.followSpeed : settings.idleSpeed) * step);
+  ring.x += (targetX - ring.x) * follow;
+  ring.y += (targetY - ring.y) * follow;
+  ring.radius = 0.175 + Math.sin(time) * 0.03 + Math.cos(time * 3) * 0.02;
+  const t = time * 0.5;
+  const positionBlend = 1 - Math.pow(0.2, frames);
+  const scaleBlend = 1 - Math.pow(0.8, frames);
+  const velocityBlend = 1 - Math.pow(0.5, frames);
   for (const point of points) {
-    // 1. Flow field: two noise octaves give a slow swell plus fine
-    //    detail, which is what separates "water" from "one slow blob".
-    const swirl = fbm(noise, point.x * noiseScale, point.y * noiseScale, 2) * Math.PI * 2;
-    const detail = fbm(noise, point.x * detailScale, point.y * detailScale + time * 0.35, 2) * Math.PI * 2;
-    const angle = swirl + detail * detailWeight;
-    const wobble = 0.7 + 0.3 * Math.sin(time * point.speed + point.phase);
-    point.vx += Math.cos(angle) * driftSpeed * wobble * step;
-    point.vy += Math.sin(angle) * driftSpeed * wobble * step;
-
-    // 2. Home spring: the only thing keeping the field from draining away.
-    point.vx += (point.homeX - point.x) * homeStiffness * step;
-    point.vy += (point.homeY - point.y) * homeStiffness * step;
-
-    // 3. Damping. Without it the spring oscillates forever.
-    const decay = Math.exp(-damping * step);
-    point.vx *= decay;
-    point.vy *= decay;
-
-    // 4. Pointer repulsion force. Quadratic falloff: gentle at the rim,
-    //    firm up close, so the edge of the cleared area is soft.
-    if (pointer.active) {
-      const dx = point.x - pointer.x;
-      const dy = point.y - pointer.y;
-      const squared = dx * dx + dy * dy;
-      if (squared < repelRadius * repelRadius && squared > 1e-8) {
-        const distance = Math.sqrt(squared);
-        const falloff = 1 - distance / repelRadius;
-        const push = repelStrength * falloff * falloff * step;
-        point.vx += (dx / distance) * push;
-        point.vy += (dy / distance) * push;
-      }
-    }
-
-    // 5. Speed clamp, then integrate.
-    const speed = Math.hypot(point.vx, point.vy);
-    if (speed > maxSpeed) {
-      const scale = maxSpeed / speed;
-      point.vx *= scale;
-      point.vy *= scale;
-    }
-    point.x += point.vx * step;
-    point.y += point.vy * step;
-
-    // 6. Keep the dot inside the container. This runs BEFORE the hard
-    //    repulsion correction: clamping afterwards could shove a dot back
-    //    into the field, which is the whole thing we are preventing.
-    if (point.x < 0) { point.x = 0; if (point.vx < 0) point.vx = -point.vx * 0.5; }
-    if (point.x > width) { point.x = width; if (point.vx > 0) point.vx = -point.vx * 0.5; }
-    if (point.y < 0) { point.y = 0; if (point.vy < 0) point.vy = -point.vy * 0.5; }
-    if (point.y > height) { point.y = height; if (point.vy > 0) point.vy = -point.vy * 0.5; }
-
-    // 7. Hard position correction: the second line of defence, and the
-    //    reason "cannot get close" is a guarantee rather than a hope.
-    if (pointer.active) resolveOutOfField(point, pointer, repelRadius, width, height);
+    const x = point.homeX, y = point.homeY;
+    const distance = Math.hypot(x - ring.x, y - ring.y);
+    const noise0 = simplex3D(x * 0.2 + 18.4924, y * 0.2 + 72.9744, t * 0.5) * 0.005;
+    const distance1 = Math.hypot(x + noise0 - ring.x, y + noise0 - ring.y);
+    const band = w => Math.max(0,
+      smoothstep(ring.radius - w * 2, ring.radius, distance) -
+      smoothstep(ring.radius, ring.radius + w, distance1));
+    const broad = band(settings.ringWidth);
+    const rim = Math.pow(band(settings.ringWidth2), 3);
+    const inside = smoothstep(ring.radius + settings.ringWidth2, ring.radius, distance);
+    const swell = simplex3D(x * 2 + 18.4924, y * 2 + 72.9744, t * 0.5);
+    const scale = broad * broad + rim * 3 + inside * 0.4 +
+      simplex3D(x * 30 + 11.4924, y * 30 + 12.9744, t * 0.5) * inside * 0.5 +
+      Math.pow((swell + 1.5) * 0.5, 2) * 0.6;
+    const wave = Math.min(distance, 1) * 0.02;
+    const dx = simplex3D(x * 4 + 88.494, y * 4 + 32.4397, t * 0.35) * 0.03 +
+      simplex3D(x * 20 + 18.4924, y * 20 + 72.9744, t * 0.5) * 0.005 + Math.sin(x * 20 + t * 4) * wave;
+    const dy = simplex3D(x * 4 + 50.904, y * 4 + 120.947, t * 0.35) * 0.03 +
+      simplex3D(x * 20 + 50.904, y * 20 + 120.947, t * 0.5) * 0.005 + Math.cos(y * 20 + t * 3) * wave;
+    const push = Math.pow(rim, 0.75) * settings.ringDisplacement * 0.25;
+    const targetPX = (x + dx + (x + dx - ring.x) * push) / 0.8;
+    const targetPY = (y + dy + (y + dy - ring.y) * push) / 0.8;
+    point.x += (targetPX - point.x) * positionBlend;
+    point.y += (targetPY - point.y) * positionBlend;
+    point.scale += (Math.max(0, scale) - point.scale) * scaleBlend;
+    point.velocity += (point.scale * 0.5 - point.velocity) * velocityBlend;
+    point.angle = Math.atan2(point.y - ring.y, point.x - ring.x) -
+      simplex3D(point.x * 10 + 18.4924, point.y * 10 + 72.9744, time * 0.85) * 0.5;
+    const colorNoise = (simplex3D(point.x * 2 + 74.664, point.y * 2 + 91.556, time * 0.5) + 1) * 0.5;
+    point.color = smoothstep(0, 0.75, colorNoise * colorNoise);
+    point.alpha = smoothstep(0.1, 0.2, point.scale);
   }
 }
-
-export { MAX_DT };

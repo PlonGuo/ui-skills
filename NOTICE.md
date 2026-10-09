@@ -10,7 +10,7 @@ UI Skills 是独立维护的网页效果演示及可复用编程技能。Morphin
 
 ## 当前发布内容的范围
 
-当前公开版本的粒子运动、图形生成和 Canvas 2D 绘制由独立代码实现。默认大括号与立方体使用几何公式生成，字体由用户系统提供。公开分发包不包含参考网站的原始可执行脚本、图标资源包、外部字体文件或原站公共样式文件。
+粒子运动、图形生成和 Canvas 2D 绘制使用本地代码实现。默认大括号与立方体使用几何公式生成。Floating dots 随附 Google Sans Flex 开源字体（SIL Open Font License 1.1，见 `floating-dots/assets/OFL.txt`），其 3D simplex noise 的 Ashima Arts 版权和 MIT 许可保留在 `floating-dots/noise-field.js`；其他 demo 使用系统字体。分发包不包含参考网站的原始可执行脚本、图标资源包或原站公共样式文件。
 
 参考截图由本项目的独立实现生成，不作为参考网站素材合集分发。文档不宣称本项目获得了原站源码许可，不宣称逐帧一致、官方功能等价或所有视觉元素均可不受限制地复用。
 

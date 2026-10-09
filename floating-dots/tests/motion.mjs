@@ -1,147 +1,44 @@
 import assert from 'node:assert/strict';
-import { stepPoints } from '../motion.js';
+import * as motion from '../motion.js';
 
-function makePoint(homeX, homeY) {
-  return { homeX, homeY, x: homeX, y: homeY, vx: 0, vy: 0, phase: 0, speed: 1, alpha: 0.4, size: 1 };
+assert.equal(typeof motion.createRingState, 'function', 'the field needs a persistent ring, rather than a hard pointer exclusion circle');
+assert.equal(typeof motion.stepRingPoints, 'function');
+const settings = { ringWidth: 0.15, ringWidth2: 0.05, ringDisplacement: 0.23, followSpeed: 1.212, idleSpeed: 0.603 };
+const makePoint = (x, y) => ({ homeX: x, homeY: y, x: x * 1.25, y: y * 1.25, scale: 0, velocity: 0 });
+const params = (time, pointer = { active: false }) => ({ time, width: 1740, height: 832, settings, pointer });
+
+// A pointer jump must move the ring gradually, not project every point out instantly.
+const ring = motion.createRingState(17);
+motion.stepRingPoints([], ring, params(0, { active: true, x: 1450, y: 416 }), 1 / 60);
+assert.ok(ring.x > 0 && ring.x < 0.03, `ring should lag the cursor, got ${ring.x}`);
+const initial = ring.x;
+for (let i = 1; i < 120; i++) motion.stepRingPoints([], ring, params(i / 60, { active: true, x: 1450, y: 416 }), 1 / 60);
+assert.ok(ring.x > initial + 0.1, 'ring should eventually follow the pointer');
+
+// Follow response must not double in speed on a 120 Hz display.
+const run = fps => {
+  const state = motion.createRingState(17);
+  for (let i = 0; i < fps; i++) motion.stepRingPoints([], state, params(i / fps, { active: true, x: 1450, y: 416 }), 1 / fps);
+  return state.x;
+};
+assert.ok(Math.abs(run(60) - run(120)) < 0.003, 'follow smoothing should use elapsed time');
+
+// A ring has enlarged dashes at its rim and fine background specks outside it.
+const state = motion.createRingState(17);
+const points = [makePoint(0.175, 0), makePoint(0.7, 0.7)];
+for (let i = 0; i < 60; i++) motion.stepRingPoints(points, state, params(0, { active: true, x: 870, y: 416 }), 1 / 60);
+assert.ok(points[0].scale > points[1].scale * 2, 'the rim should be larger than the background');
+const unpushed = [makePoint(0.175, 0)];
+const unpushedRing = motion.createRingState(17);
+for (let i = 0; i < 60; i++) motion.stepRingPoints(unpushed, unpushedRing, { ...params(0, { active: true, x: 870, y: 416 }), settings: { ...settings, ringDisplacement: 0 } }, 1 / 60);
+assert.ok(points[0].x > unpushed[0].x, 'the ring should displace rim particles outward relative to their floating positions');
+const before = points.map(p => ({ ...p }));
+for (let i = 1; i <= 120; i++) motion.stepRingPoints(points, state, params(i / 60), 1 / 60);
+assert.ok(points.some((p, i) => Math.hypot(p.x - before[i].x, p.y - before[i].y) > 0.005), 'the floating field should evolve with time');
+assert.ok(Math.abs(state.radius - 0.175) > 0.005, 'the ring should breathe');
+for (let i = 0; i < 1200; i++) motion.stepRingPoints(points, state, params(i / 30), 1 / 30);
+for (const p of points) {
+  assert.ok([p.x, p.y, p.scale, p.angle, p.color].every(Number.isFinite), 'all render values must stay finite');
+  assert.ok(Math.hypot(p.x - p.homeX * 1.25, p.y - p.homeY * 1.25) < 0.4, 'particles should not drain away');
 }
-
-function baseParams(overrides = {}) {
-  return {
-    width: 800, height: 600, time: 0,
-    driftSpeed: 9, noiseScale: 0.0006, detailScale: 0.0015, detailWeight: 0.4,
-    homeStiffness: 1.6, damping: 2.4,
-    repelRadius: 190, repelStrength: 900, maxSpeed: 260,
-    // How far a dot may wander from home before the field is considered
-    // to be draining away. Roughly one grid cell.
-    spacingBound: 34,
-    pointer: { x: -10000, y: -10000, active: false },
-    ...overrides,
-  };
-}
-
-const dt = 1 / 60;
-
-// --- 1. Points stay near home over a long run ---
-// This is the anti-random-walk guarantee. Without the home spring the
-// dots would wander off and the field would drain to its edges.
-{
-  const points = [];
-  for (let i = 0; i < 400; i += 1) {
-    // Keep every home inside the 800x600 field: a home outside the bounds
-    // would be clamped at an edge and could never be returned to.
-    points.push(makePoint(20 + (i % 20) * 28, 20 + Math.floor(i / 20) * 28));
-  }
-  const field = baseParams();
-  for (let frame = 0; frame < 3600; frame += 1) { // 60 seconds
-    field.time = frame * dt;
-    stepPoints(points, field, dt);
-    for (const p of points) assert.ok(Number.isFinite(p.x) && Number.isFinite(p.y), 'coordinates must stay finite');
-  }
-  let worst = 0;
-  for (const p of points) worst = Math.max(worst, Math.hypot(p.x - p.homeX, p.y - p.homeY));
-  assert.ok(worst < field.spacingBound, `dots should stay in their neighbourhood; worst excursion ${worst}`);
-}
-
-// --- 2. Review Focus #5: points actually move ---
-{
-  const points = [makePoint(400, 300)];
-  const field = baseParams();
-  const start = { x: points[0].x, y: points[0].y };
-  for (let frame = 0; frame < 120; frame += 1) {
-    field.time = frame * dt;
-    stepPoints(points, field, dt);
-  }
-  const travelled = Math.hypot(points[0].x - start.x, points[0].y - start.y);
-  assert.ok(travelled > 0.5, `point should drift away from home, moved only ${travelled}`);
-}
-
-// --- 3. Fluid feel: the flow field varies smoothly in space ---
-// This is the difference between "water" and "visual static", and it is
-// a property of the field itself, so it is asserted directly rather than
-// inferred from dot positions. Wavelength is 1/scale, so both scales must
-// stay well above the dot spacing or neighbours will disagree.
-{
-  const field = baseParams();
-  const spacing = 34;
-  const sample = [];
-  for (let row = 0; row < 5; row += 1) {
-    for (let col = 0; col < 5; col += 1) {
-      const x = 400 + col * spacing;
-      const y = 300 + row * spacing;
-      sample.push([x, y]);
-    }
-  }
-  const angleAt = (x, y, time) => {
-    const points = [makePoint(x, y)];
-    const params = { ...field, time, pointer: { x: -10000, y: -10000, active: false } };
-    stepPoints(points, params, dt);
-    return Math.atan2(points[0].vy, points[0].vx);
-  };
-  const angleDelta = (a, b) => { const d = Math.abs(a - b); return d > Math.PI ? Math.PI * 2 - d : d; };
-
-  let worstStep = 0;
-  for (const [x, y] of sample) {
-    worstStep = Math.max(worstStep, angleDelta(angleAt(x, y, 0), angleAt(x + spacing, y, 0)));
-    worstStep = Math.max(worstStep, angleDelta(angleAt(x, y, 0), angleAt(x, y + spacing, 0)));
-  }
-  assert.ok(worstStep < Math.PI / 3,
-    `flow direction must vary smoothly over one grid step; worst delta was ${(worstStep * 180 / Math.PI).toFixed(1)} degrees`);
-
-  // The field must also change over time, or the dots would sit still.
-  const centre = angleAt(400, 300, 0);
-  let timeDelta = 0;
-  for (let t = 0; t < 5; t += 0.25) timeDelta = Math.max(timeDelta, angleDelta(centre, angleAt(400, 300, t)));
-  assert.ok(timeDelta > 0.1, 'the flow field must evolve over time');
-}
-
-// --- 4. Review Focus: hard position correction — no point inside the field ---
-{
-  const points = [];
-  for (let i = 0; i < 200; i += 1) {
-    points.push(makePoint(Math.random() * 800, Math.random() * 600));
-  }
-  const repelRadius = 190;
-  // Teleporting pointer plus a fast sweep is the case that beats force alone.
-  for (let frame = 0; frame < 240; frame += 1) {
-    const sweep = (frame / 240) * 800;
-    const field = baseParams({ pointer: { x: sweep, y: 300, active: true }, time: frame * dt, repelStrength: 900 });
-    stepPoints(points, field, dt);
-    for (const p of points) {
-      const distance = Math.hypot(p.x - sweep, p.y - 300);
-      assert.ok(distance >= repelRadius - 0.001,
-        `point entered the repulsion field: distance ${distance} < ${repelRadius}`);
-    }
-  }
-}
-
-// --- 5. Field backfills after the pointer leaves ---
-{
-  const points = [makePoint(400, 300)];
-  let field = baseParams({ pointer: { x: 400, y: 300, active: true } });
-  for (let frame = 0; frame < 120; frame += 1) {
-    field.time = frame * dt;
-    stepPoints(points, field, dt);
-  }
-  const pushed = Math.hypot(points[0].x - 400, points[0].y - 300);
-  assert.ok(pushed > 100, 'point should have been pushed out of the field');
-  field = baseParams();
-  for (let frame = 0; frame < 600; frame += 1) {
-    field.time = frame * dt;
-    stepPoints(points, field, dt);
-  }
-  const home = Math.hypot(points[0].x - 400, points[0].y - 300);
-  assert.ok(home < 20, `point should settle back near home, ended ${home} away`);
-}
-
-// --- 6. dt is clamped so a stalled tab cannot explode the simulation ---
-{
-  const points = [makePoint(400, 300)];
-  const field = baseParams();
-  stepPoints(points, field, 5); // a 5 second frame, as after a background tab
-  for (const p of points) {
-    assert.ok(Number.isFinite(p.x) && Math.abs(p.vx) <= field.maxSpeed + 1,
-      'a huge dt must be clamped, not integrated at face value');
-  }
-}
-
-console.log('PASS motion');
+console.log('PASS ring motion');

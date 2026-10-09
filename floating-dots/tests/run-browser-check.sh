@@ -10,16 +10,20 @@ set -euo pipefail
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 port="${PORT:-4331}"
 
-python3 -m http.server "$port" --directory "$here" >/dev/null 2>&1 &
+server_log="$(mktemp /tmp/floating-dots-server.XXXXXX)"
+node "$here/server.mjs" --port "$port" >"$server_log" 2>&1 &
 server_pid=$!
-cleanup() { kill "$server_pid" 2>/dev/null || true; }
+cleanup() { kill "$server_pid" 2>/dev/null || true; wait "$server_pid" 2>/dev/null || true; rm -f "$server_log"; }
 trap cleanup EXIT
 
 # Wait for the server to accept a connection before handing over.
+ready=0
 for _ in $(seq 1 40); do
-  if curl -sf -o /dev/null "http://127.0.0.1:${port}/"; then break; fi
+  if ! kill -0 "$server_pid" 2>/dev/null; then cat "$server_log" >&2; exit 1; fi
+  if curl -sf -o /dev/null "http://127.0.0.1:${port}/"; then ready=1; break; fi
   sleep 0.1
 done
+if [ "$ready" -ne 1 ]; then cat "$server_log" >&2; echo "Preview did not become ready" >&2; exit 1; fi
 
 PORT="$port" BASE_URL="http://127.0.0.1:${port}/" \
   node "$here/tests/browser-check.mjs"

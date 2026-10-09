@@ -3,28 +3,24 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="theme-color" content="#191b1f" />
-    <meta name="description" content="A drifting dot field that yields around the pointer." />
+    <meta name="theme-color" content="#000000" />
+    <meta name="description" content="An interactive blue particle field with a floating ring that follows your pointer." />
     <title>Floating dots</title>
     <link rel="icon" href="data:," />
+    <link rel="preload" href="./assets/google-sans-flex-latin.woff2" as="font" type="font/woff2" crossorigin />
     <link rel="stylesheet" href="./styles.css" />
     <script type="module" src="./app.js"></script>
   </head>
   <body>
-    <!-- The canvas is a decorative layer: it is blank to crawlers and
-         screen readers, so it is marked aria-hidden and every piece of
-         real content lives in the DOM layer above it. -->
-    <div class="backdrop" id="backdrop" aria-hidden="true"></div>
-    <main class="overlay">
-      <p class="eyebrow">Canvas 2D background</p>
-      <h1 class="title">Dots that drift, and give way</h1>
-      <p class="lede">
-        The field floats on its own. Move the pointer and the dots part
-        around it, then settle back once it leaves.
-      </p>
-      <p class="actions">
-        <button class="button" type="button" id="demo-action">Click through the field</button>
-      </p>
+    <main class="download-section">
+      <div class="backdrop" id="backdrop" aria-hidden="true"></div>
+      <div class="overlay">
+        <h1 class="title">Ideas in motion<br />Made to flow<span class="cursor" aria-hidden="true"></span></h1>
+        <div class="actions">
+          <a class="button button-primary" id="demo-action" href="#backdrop">Explore the motion</a>
+          <a class="button button-secondary" href="?tune=1">Customize the effect</a>
+        </div>
+      </div>
     </main>
   </body>
 </html>

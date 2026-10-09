@@ -7,6 +7,8 @@ import assert from 'node:assert/strict';
 const windowListeners = new Map();
 const documentListeners = new Map();
 const observers = [];
+const pendingFrames = new Map();
+let nextFrame = 0;
 
 function addListener(store, type, fn) {
   if (!store.has(type)) store.set(type, []);
@@ -46,7 +48,7 @@ function stubCanvas() {
     },
     getContext: () => ({
       setTransform() {}, clearRect() {}, fillRect() {}, drawImage() {},
-      beginPath() {}, arc() {}, fill() {}, save() {}, restore() {},
+      beginPath() {}, arc() {}, fill() {}, save() {}, restore() {}, moveTo() {}, lineTo() {}, stroke() {},
       fillStyle: '', createRadialGradient: () => ({ addColorStop() {} }),
     }),
     getBoundingClientRect: () => ({ left: 0, top: 0, width: 800, height: 600 }),
@@ -77,8 +79,8 @@ globalThis.window = {
   matchMedia: () => ({ matches: false, addEventListener() {}, removeEventListener() {} }),
   addEventListener(type, fn) { addListener(windowListeners, type, fn); },
   removeEventListener(type, fn) { removeListener(windowListeners, type, fn); },
-  requestAnimationFrame: () => 1,
-  cancelAnimationFrame() {},
+  requestAnimationFrame(fn) { const id = ++nextFrame; pendingFrames.set(id, fn); return id; },
+  cancelAnimationFrame(id) { pendingFrames.delete(id); },
 };
 globalThis.document = {
   hidden: false,
@@ -86,8 +88,16 @@ globalThis.document = {
   addEventListener(type, fn) { addListener(documentListeners, type, fn); },
   removeEventListener(type, fn) { removeListener(documentListeners, type, fn); },
 };
-globalThis.ResizeObserver = class { constructor(fn) { this.fn = fn; observers.push(this); } observe() {} disconnect() {} };
-globalThis.IntersectionObserver = class { constructor(fn) { this.fn = fn; observers.push(this); } observe() {} disconnect() {} };
+globalThis.ResizeObserver = class {
+  constructor(fn) { this.fn = fn; this.target = null; observers.push(this); }
+  observe(target) { this.target = target; }
+  disconnect() { this.target = null; this.disconnected = true; }
+};
+globalThis.IntersectionObserver = class {
+  constructor(fn) { this.fn = fn; this.target = null; observers.push(this); }
+  observe(target) { this.target = target; }
+  disconnect() { this.target = null; this.disconnected = true; }
+};
 
 const { mountFloatingDots } = await import('../floating-dots-engine.js');
 
@@ -138,5 +148,82 @@ assert.equal(effect.stats().running, true, 'visible document must resume the loo
 effect.dispose();
 assert.equal(totalListeners(windowListeners), 0, 'dispose must remove window listeners');
 assert.equal(totalListeners(documentListeners), 0, 'dispose must remove document listeners');
+assert.equal(pendingFrames.size, 0, 'dispose must cancel the pending animation frame');
+
+// --- changing viewport, input type and motion preferences during a mount ---
+{
+  const mediaListeners = new Map();
+  const motionQuery = {
+    matches: false,
+    addEventListener(type, fn) { addListener(mediaListeners, type, fn); },
+    removeEventListener(type, fn) { removeListener(mediaListeners, type, fn); },
+  };
+  const realMatchMedia = window.matchMedia;
+  window.matchMedia = () => motionQuery;
+  const container = stubContainer();
+  const firstObserver = observers.length;
+  const dynamicEffect = mountFloatingDots(container);
+  const [resizeObserver, intersectionObserver] = observers.slice(firstObserver);
+  try {
+    await dynamicEffect.ready;
+    assert.equal(resizeObserver.target, container, 'resize must observe the mounted container');
+    assert.equal(intersectionObserver.target, container, 'visibility must observe the mounted container');
+    assert.equal(dynamicEffect.stats().running, true);
+    assert.equal(pendingFrames.size, 1, 'mount must schedule one frame');
+
+    container.__rect.width = 400;
+    container.__rect.height = 300;
+    resizeObserver.fn();
+    assert.equal(dynamicEffect.canvas.width, 400, 'resize must update canvas backing width');
+    assert.equal(dynamicEffect.canvas.height, 300, 'resize must update canvas backing height');
+    assert.equal(dynamicEffect.stats().width, 400, 'resize must update the pointer coordinate bounds');
+    assert.equal(dynamicEffect.stats().height, 300);
+    assert.ok(dynamicEffect.debugPoints().every(p => Number.isFinite(p.x) && Number.isFinite(p.y)),
+      'resize must retain finite particle positions');
+
+    dispatch(windowListeners, 'pointermove', { clientX: 200, clientY: 150, pointerType: 'touch' });
+    assert.equal(dynamicEffect.stats().pointer.active, false, 'touch must not activate pointer following');
+    dispatch(windowListeners, 'pointermove', { clientX: 200, clientY: 150, pointerType: 'mouse' });
+    const mousePointer = dynamicEffect.stats().pointer;
+    assert.equal(mousePointer.active, true);
+    dispatch(windowListeners, 'pointermove', { clientX: 10, clientY: 10, pointerType: 'touch' });
+    assert.deepEqual(dynamicEffect.stats().pointer, mousePointer, 'touch must not move an active mouse pointer');
+    dispatch(windowListeners, 'pointerout', { relatedTarget: {} });
+    assert.deepEqual(dynamicEffect.stats().pointer, mousePointer, 'moving between page elements must retain pointer following');
+    dispatch(windowListeners, 'pointerout', { relatedTarget: null });
+    assert.equal(dynamicEffect.stats().pointer.active, false, 'leaving the document must release pointer following');
+
+    intersectionObserver.fn([{ isIntersecting: false }]);
+    assert.equal(dynamicEffect.stats().running, false, 'offscreen effects must pause');
+    assert.equal(pendingFrames.size, 0, 'offscreen pause must cancel the pending frame');
+    dynamicEffect.start();
+    assert.equal(dynamicEffect.stats().running, false, 'explicit start must respect offscreen visibility');
+    intersectionObserver.fn([{ isIntersecting: true }]);
+    assert.equal(dynamicEffect.stats().running, true, 'reentering the viewport must resume');
+
+    motionQuery.matches = true;
+    dispatch(mediaListeners, 'change', {});
+    assert.equal(dynamicEffect.stats().running, false, 'enabling reduced motion must pause an active effect');
+    assert.equal(pendingFrames.size, 0, 'reduced motion must cancel the pending frame');
+    motionQuery.matches = false;
+    dispatch(mediaListeners, 'change', {});
+    assert.equal(dynamicEffect.stats().running, true, 'disabling reduced motion must resume a visible effect');
+    assert.equal(pendingFrames.size, 1, 'resuming must schedule one frame');
+  } finally {
+    dynamicEffect.dispose();
+    window.matchMedia = realMatchMedia;
+  }
+  assert.equal(totalListeners(mediaListeners), 0, 'dispose must remove motion preference listeners');
+  assert.equal(totalListeners(windowListeners), 0, 'dispose must remove dynamic window listeners');
+  assert.equal(totalListeners(documentListeners), 0, 'dispose must remove dynamic document listeners');
+  assert.ok(resizeObserver.disconnected && intersectionObserver.disconnected, 'dispose must disconnect both observers');
+  assert.equal(pendingFrames.size, 0, 'dispose must cancel the resumed frame');
+  dynamicEffect.start();
+  resizeObserver.fn();
+  intersectionObserver.fn([{ isIntersecting: true }]);
+  assert.equal(dynamicEffect.stats().running, false, 'callbacks after disposal must not restart the effect');
+  assert.equal(pendingFrames.size, 0, 'callbacks after disposal must not schedule frames');
+  assert.equal(container.children.length, 0, 'callbacks after disposal must leave the canvas detached');
+}
 
 console.log('PASS engine-lifecycle');

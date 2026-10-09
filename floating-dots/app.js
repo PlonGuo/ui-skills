@@ -7,14 +7,6 @@ window.addEventListener('pagehide', event => {
   if (!event.persisted) effect.dispose();
 });
 
-// Prove the field does not steal input. The background layer is
-// pointer-events:none, so a click on the button above it must arrive
-// normally. The flag is what the browser check reads.
-document.querySelector('#demo-action').addEventListener('click', () => {
-  window.__clickedThrough = true;
-  console.log('Content layer received the click; the background did not intercept it.');
-});
-
 // Expose the handle for the browser-side verification in tests/.
 window.__floatingDotsStats = () => effect.stats();
 
@@ -24,22 +16,15 @@ window.__floatingDotsStats = () => effect.stats();
 // "Copy current parameters" and hand the values over to be fixed as
 // defaults.
 if (new URLSearchParams(location.search).has('tune')) {
-  // [key, min, max, step]. The noise scales are tiny and their useful
-  // range is narrow, so the sliders step in ten-thousandths.
+  // [key, min, max, step]. Ring dimensions use normalized plane units.
   const spec = [
-    ['spacing', 16, 64, 1],
-    ['dotRadius', 0.5, 3, 0.05],
-    ['baseAlpha', 0.05, 1, 0.01],
-    ['alphaJitter', 0, 0.4, 0.01],
-    ['driftSpeed', 0, 60, 0.5],
-    ['noiseScale', 0.0002, 0.004, 0.0001],
-    ['detailScale', 0.0005, 0.006, 0.0001],
-    ['detailWeight', 0, 1.2, 0.02],
-    ['homeStiffness', 0, 12, 0.1],
-    ['damping', 0.2, 8, 0.05],
-    ['repelRadius', 20, 400, 2],
-    ['repelStrength', 0, 3000, 10],
-    ['maxSpeed', 20, 800, 5],
+    ['density', 100, 290, 1],
+    ['particlesScale', 0.1, 2, 0.01],
+    ['ringWidth', 0.001, 0.3, 0.001],
+    ['ringWidth2', 0.001, 0.2, 0.001],
+    ['ringDisplacement', 0, 1, 0.01],
+    ['followSpeed', 0.1, 6, 0.05],
+    ['idleSpeed', 0.1, 3, 0.05],
   ];
 
   const panel = document.createElement('form');

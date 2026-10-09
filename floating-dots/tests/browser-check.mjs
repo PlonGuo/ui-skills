@@ -1,171 +1,101 @@
-/**
- * Browser-side verification for the floating-dots showcase.
- *
- * Run with a local server already serving floating-dots/ on 4331:
- *   python3 -m http.server 4331 --directory floating-dots
- *   node floating-dots/tests/browser-check.mjs
- *
- * playwright-core is resolved from the local npx cache rather than added
- * to this repo's dependencies; the effect itself has no dependencies.
- */
 import assert from 'node:assert/strict';
-import { chromium } from '/Users/plonguo/.npm/_npx/9833c18b2d85bc59/node_modules/playwright-core/index.mjs';
+import { chromium } from 'playwright-core';
+import { mkdir } from 'node:fs/promises';
 
 const BASE = process.env.BASE_URL || 'http://127.0.0.1:4331/';
-const REPEL_RADIUS = 190;
+// Keep generated evidence away from the user's existing screenshots.
+const OUTPUT = process.env.SCREENSHOT_DIR || '/tmp/floating-dots-verification';
+await mkdir(OUTPUT, { recursive: true });
 const browser = await chromium.launch({ channel: 'chrome' });
 const results = {};
-
-/** Count pixels above the threshold: the drawn dots, and nothing else. */
-const countLit = (threshold = 60) => {
-  const source = document.querySelector('#backdrop canvas');
-  const copy = document.createElement('canvas');
-  copy.width = source.width;
-  copy.height = source.height;
-  const ctx = copy.getContext('2d');
-  ctx.drawImage(source, 0, 0);
-  const data = ctx.getImageData(0, 0, copy.width, copy.height).data;
-  let lit = 0;
-  for (let i = 0; i < data.length; i += 4) if (data[i] > threshold) lit += 1;
-  return lit;
+const readPixels = () => {
+  const canvas = document.querySelector('#backdrop canvas');
+  const ctx = canvas.getContext('2d');
+  const data = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+  let blue = 0, other = 0, black = 0;
+  for (let i = 0; i < data.length; i += 4) {
+    if (data[i + 2] > 50 && data[i + 2] > data[i] * 1.4) blue++;
+    else if (Math.max(data[i], data[i + 1], data[i + 2]) > 50) other++;
+    if (data[i] === 0 && data[i + 1] === 0 && data[i + 2] === 0) black++;
+  }
+  return { blue, other, black: black / (data.length / 4) };
 };
-
-// --- desktop, 1280x800 ---
-{
-  const page = await browser.newPage({ viewport: { width: 1280, height: 800 }, deviceScaleFactor: 1 });
+try {
+  const page = await browser.newPage({ viewport: { width: 1740, height: 832 }, deviceScaleFactor: 1 });
   const errors = [];
-  page.on('pageerror', error => errors.push(`pageerror: ${error.message}`));
-  page.on('console', message => { if (message.type() === 'error') errors.push(`console: ${message.text()}`); });
+  page.on('pageerror', e => errors.push(e.message));
   await page.goto(BASE, { waitUntil: 'load' });
   await page.waitForTimeout(600);
+  assert.deepEqual(errors, [], 'page should render without script errors');
+  const pixels = await page.evaluate(readPixels);
+  assert.ok(pixels.blue > 700 && pixels.other < 50, `expected blue dashes, got ${JSON.stringify(pixels)}`);
+  assert.ok(pixels.black > 0.97, 'the section should have a pure black, sparse background');
+  results.pixels = pixels;
+  const heading = await page.locator('.title').boundingBox();
+  assert.ok(heading.x < 100 && heading.y > 250 && heading.y < 400, 'heading should match the left-aligned reference');
+  await page.screenshot({ path: `${OUTPUT}/desktop.png` });
 
-  assert.deepEqual(errors, [], `page reported errors: ${errors.join(' | ')}`);
-
-  const canvasBox = await page.locator('#backdrop canvas').boundingBox();
-  assert.ok(canvasBox && canvasBox.width > 1200 && canvasBox.height > 700,
-    `canvas should cover the viewport, got ${JSON.stringify(canvasBox)}`);
-
-  // 1. Static frame: dots must be drawn at all.
-  await page.screenshot({ path: 'floating-dots/screenshot.png' });
-  const painted = await page.evaluate(countLit);
-  assert.ok(painted > 500, `expected drawn dots, counted ${painted} lit pixels`);
-  results.paintedPixels = painted;
-
-  // 2. Review Focus #5: the field must actually move. One frame cannot
-  //    distinguish "animating" from "frozen", so compare two.
-  const diff = await page.evaluate(async () => {
-    const source = document.querySelector('#backdrop canvas');
-    const grab = () => {
-      const copy = document.createElement('canvas');
-      copy.width = source.width;
-      copy.height = source.height;
-      copy.getContext('2d').drawImage(source, 0, 0);
-      return copy.getContext('2d').getImageData(0, 0, copy.width, copy.height).data;
-    };
-    const a = grab();
-    await new Promise(resolve => setTimeout(resolve, 400));
-    const b = grab();
+  const movement = await page.evaluate(async () => {
+    const canvas = document.querySelector('#backdrop canvas');
+    const ctx = canvas.getContext('2d');
+    const a = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+    await new Promise(resolve => setTimeout(resolve, 450));
+    const b = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
     let changed = 0;
-    for (let i = 0; i < a.length; i += 4) if (Math.abs(a[i] - b[i]) > 12) changed += 1;
+    for (let i = 2; i < a.length; i += 4) if (Math.abs(a[i] - b[i]) > 12) changed++;
     return changed;
   });
-  assert.ok(diff > 300, `field appears frozen; only ${diff} pixels changed between frames`);
-  results.movedPixels = diff;
+  assert.ok(movement > 500, 'the floating pattern must move');
+  results.changedPixels = movement;
 
-  // 3. Repulsion: the core of the field around the pointer must be empty.
-  await page.mouse.move(640, 400);
-  await page.waitForTimeout(900);
-  const hole = await page.evaluate(({ radius }) => {
-    const source = document.querySelector('#backdrop canvas');
-    const ctx = source.getContext('2d');
-    const dpr = source.width / source.getBoundingClientRect().width;
-    const r = radius * dpr;
-    const cx = 640 * dpr - r;
-    const cy = 400 * dpr - r;
-    const image = ctx.getImageData(cx, cy, r * 2, r * 2).data;
-    let lit = 0;
-    for (let y = 0; y < r * 2; y += 1) {
-      for (let x = 0; x < r * 2; x += 1) {
-        if (Math.hypot(x - r, y - r) > r * 0.72) continue;
-        if (image[(y * r * 2 + x) * 4] > 60) lit += 1;
-      }
-    }
-    return lit;
-  }, { radius: REPEL_RADIUS });
-  assert.equal(hole, 0, `no dot may sit in the repulsion core; found ${hole} lit pixels`);
-  results.repulsionCoreLit = hole;
-  await page.screenshot({ path: 'floating-dots/screenshot-repel.png' });
-
-  // 4. Review Focus #1: the field still works with the pointer over the
-  //    content layer, not over the canvas.
-  const titleBox = await page.locator('.title').boundingBox();
-  await page.mouse.move(titleBox.x + titleBox.width / 2, titleBox.y + titleBox.height / 2);
-  await page.waitForTimeout(500);
-  const overContent = await page.evaluate(() => window.__floatingDotsStats().pointer);
-  assert.equal(overContent.active, true,
-    'pointer over the content layer must still drive the field');
-  results.pointerOverContent = overContent;
-
-  // 5. Backfill after the pointer leaves.
-  await page.mouse.move(5, 5);
-  await page.waitForTimeout(2500);
-  const backfilled = await page.evaluate(countLit);
-  assert.ok(backfilled > painted * 0.85,
-    `field should refill after the pointer leaves; ${backfilled} vs ${painted} lit pixels`);
-  results.backfilledPixels = backfilled;
-
-  // 6. The content layer still receives clicks. The flag is set by the
-  //    page's own handler in app.js; if the canvas swallowed the event it
-  //    would never flip.
-  await page.evaluate(() => { window.__clickedThrough = false; });
+  await page.mouse.move(1340, 416);
+  await page.waitForTimeout(1600);
+  const right = await page.evaluate(() => window.__floatingDotsStats());
+  assert.ok(right.ring.screenX > 1100, 'ring should follow the pointer to the right');
+  await page.screenshot({ path: `${OUTPUT}/pointer-right.png` });
+  await page.mouse.move(380, 416);
+  await page.waitForTimeout(1600);
+  const left = await page.evaluate(() => window.__floatingDotsStats());
+  assert.ok(left.ring.screenX < right.ring.screenX - 500, 'ring should travel across the section');
+  assert.ok(left.pointer.active, 'pointer over content must still drive the background');
+  await page.screenshot({ path: `${OUTPUT}/pointer-left.png` });
+  // Do not navigate away to download. Verify the overlaid link receives input.
+  await page.locator('#demo-action').evaluate(a => a.addEventListener('click', event => {
+    event.preventDefault(); window.__clickedThrough = true;
+  }));
   await page.click('#demo-action');
-  const clickedThrough = await page.evaluate(() => window.__clickedThrough === true);
-  assert.equal(clickedThrough, true, 'the button above the canvas must be clickable');
-  results.clickThrough = true;
-
+  assert.equal(await page.evaluate(() => window.__clickedThrough), true, 'content must remain clickable');
+  await page.mouse.move(-10, -10);
+  await page.waitForTimeout(120);
+  assert.equal((await page.evaluate(() => window.__floatingDotsStats())).pointer.active, false, 'leaving the section should restore autonomous motion');
+  results.interaction = 'follow, leave and click-through passed';
   await page.close();
-}
 
-// --- small viewport: no horizontal overflow ---
-{
-  const page = await browser.newPage({ viewport: { width: 375, height: 667 }, deviceScaleFactor: 1 });
-  await page.goto(BASE, { waitUntil: 'load' });
-  await page.waitForTimeout(400);
-  const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
-  assert.ok(overflow <= 0, `horizontal overflow of ${overflow}px at 375px wide`);
-  results.narrowViewport = 'ok';
-  await page.close();
-}
+  for (const [name, width, height, scale] of [['mobile', 375, 667, 2], ['tablet', 768, 1024, 1], ['retina', 1280, 800, 2]]) {
+    const page = await browser.newPage({ viewport: { width, height }, deviceScaleFactor: scale });
+    await page.goto(BASE, { waitUntil: 'load' });
+    await page.waitForTimeout(400);
+    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false, `${name} must not overflow`);
+    assert.ok((await page.evaluate(readPixels)).blue > 100, `${name} should render particles`);
+    await page.screenshot({ path: `${OUTPUT}/${name}.png` });
+    await page.close();
+  }
+  results.responsive = 'mobile, tablet, retina passed';
 
-// --- reduced motion: one static frame, no loop ---
-{
-  const page = await browser.newPage({ viewport: { width: 900, height: 600 }, deviceScaleFactor: 1 });
-  await page.emulateMedia({ reducedMotion: 'reduce' });
-  await page.goto(BASE, { waitUntil: 'load' });
-  await page.waitForTimeout(500);
-  const running = await page.evaluate(() => window.__floatingDotsStats().running);
-  assert.equal(running, false, 'reduced motion must not run the frame loop');
-  const still = await page.evaluate(async () => {
-    const source = document.querySelector('#backdrop canvas');
-    const copy = document.createElement('canvas');
-    copy.width = source.width;
-    copy.height = source.height;
-    const ctx = copy.getContext('2d');
-    ctx.drawImage(source, 0, 0);
-    const a = ctx.getImageData(0, 0, copy.width, copy.height).data;
-    await new Promise(resolve => setTimeout(resolve, 400));
-    ctx.drawImage(source, 0, 0);
-    const b = ctx.getImageData(0, 0, copy.width, copy.height).data;
-    let changed = 0;
-    for (let i = 0; i < a.length; i += 4) if (a[i] !== b[i]) changed += 1;
-    return changed;
+  const still = await browser.newPage({ viewport: { width: 900, height: 600 }, reducedMotion: 'reduce' });
+  await still.goto(`${BASE}?tune=1`, { waitUntil: 'load' });
+  await still.waitForTimeout(200);
+  const a = await still.evaluate(readPixels);
+  await still.waitForTimeout(400);
+  assert.deepEqual(await still.evaluate(readPixels), a, 'reduced motion should stay still');
+  assert.ok(a.blue > 300, 'reduced motion must still display the particle field');
+  assert.equal(await still.evaluate(() => window.__floatingDotsStats().running), false);
+  await still.locator('input[name="ringDisplacement"]').evaluate(input => {
+    input.value = '1'; input.dispatchEvent(new Event('input', { bubbles: true }));
   });
-  assert.equal(still, 0, 'reduced motion must render exactly once and stay still');
-  const stillPainted = await page.evaluate(countLit);
-  assert.ok(stillPainted > 200, `reduced motion should still draw the field, saw ${stillPainted}`);
-  results.reducedMotion = { running: false, changedPixels: still, painted: stillPainted };
-  await page.close();
-}
-
-await browser.close();
-console.log(JSON.stringify({ status: 'PASS', ...results }, null, 2));
+  assert.notDeepEqual(await still.evaluate(readPixels), a, 'tuning reduced-motion mode must refresh its static frame');
+  assert.equal(await still.evaluate(() => window.__floatingDotsStats().running), false, 'tuning must not start animation for reduced-motion users');
+  results.reducedMotion = 'static field passed';
+  await still.close();
+  console.log(JSON.stringify({ status: 'PASS', ...results, screenshots: OUTPUT }, null, 2));
+} finally { await browser.close(); }

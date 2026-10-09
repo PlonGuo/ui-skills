@@ -16,7 +16,7 @@ function makeStubCanvas() {
       }
       this.parentNode = null;
     },
-    getContext: () => ({ setTransform() {}, clearRect() {}, fillRect() {}, drawImage() {}, fill() {}, beginPath() {}, arc() {}, save() {}, restore() {} }),
+    getContext: () => ({ setTransform() {}, clearRect() {}, fillRect() {}, drawImage() {}, fill() {}, beginPath() {}, arc() {}, save() {}, restore() {}, moveTo() {}, lineTo() {}, stroke() {} }),
     getBoundingClientRect: () => ({ left: 0, top: 0, width: this.__w ?? 800, height: this.__h ?? 600 }),
     addEventListener(type, fn) { listeners.set(type, fn); },
     removeEventListener(type) { listeners.delete(type); },
@@ -77,8 +77,7 @@ await effect.ready;
 // --- the resolved settings are observable (the tuning panel reads them) ---
 const exposed = effect.stats().settings;
 assert.equal(typeof exposed, 'object', 'stats() must expose the resolved settings');
-assert.equal(exposed.spacing, 34, 'exposed settings should carry the resolved spacing');
-assert.equal(exposed.noiseScale, 0.0006, 'exposed settings should carry the resolved noise scale');
+assert.ok(exposed.ringWidth > 0 && exposed.density > 0, 'resolved settings should expose the ring and density controls');
 assert.notEqual(exposed, effect.stats().settings, 'settings should be copied, not handed out by reference');
 
 // --- Review Focus #3: double dispose and dispose-after-mount ---
@@ -113,10 +112,16 @@ tinyEffect.dispose();
 // --- setOptions contract ---
 const opt = mountFloatingDots(makeStubContainer());
 await opt.ready;
-opt.setOptions({ spacing: 60 });
-assert.equal(opt.stats().spacing, 60, 'setOptions should apply the new spacing');
-opt.setOptions({ spacing: Number.NaN });
-assert.equal(opt.stats().spacing, 60, 'setOptions must ignore non-finite values');
+const lowCount = opt.stats().count;
+opt.setOptions({ density: 260 });
+assert.ok(opt.stats().count > lowCount, 'increasing density should produce more particles');
+opt.setOptions({ density: Number.NaN });
+assert.equal(opt.stats().settings.density, 260, 'setOptions must ignore non-finite values');
+opt.stop();
+const beforeStaticTune = opt.debugPoints();
+opt.setOptions({ ringDisplacement: 1 });
+assert.ok(opt.debugPoints().some((p, i) => Math.hypot(p.x - beforeStaticTune[i].x, p.y - beforeStaticTune[i].y) > 1),
+  'tuning a paused field should update its static particle positions');
 opt.dispose();
 
 // --- bad container ---
@@ -135,7 +140,7 @@ assert.throws(() => mountFloatingDots({}), TypeError, 'non-HTMLElement container
         setTransform() {}, clearRect() {}, fillRect() {},
         drawImage() { drawCalls.drawImage += 1; },
         arc() { drawCalls.arc += 1; },
-        beginPath() {}, fill() {}, save() {}, restore() {},
+        beginPath() {}, fill() {}, save() {}, restore() {}, moveTo() {}, lineTo() {}, stroke() {},
         set globalAlpha(v) { drawCalls.globalAlphaSets += 1; },
         get globalAlpha() { return 1; },
         fillStyle: '', createRadialGradient: () => ({ addColorStop() {} }),
