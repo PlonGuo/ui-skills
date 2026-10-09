@@ -243,13 +243,39 @@ export function mountFloatingDots(container, options = {}) {
 
   function setOptions(partial = {}) {
     if (disposed) return;
+    // Rebuilding the point set re-randomises every dot's jitter, phase and
+    // alpha, so the whole field visibly jumps. Doing that on every slider
+    // change would make the tuning panel useless: you could not tell
+    // whether the feel changed because of the parameter or because the
+    // dots were rerolled. Only the options that actually define the point
+    // set trigger a rebuild; motion-only options take effect on the next
+    // frame, and pure presentation options just redraw.
+    let needsBuild = false;
+    let needsSprites = false;
+    let needsRender = false;
+
     for (const [key, value] of Object.entries(partial)) {
       if (!(key in DEFAULTS)) continue;
-      if (key === 'background') { settings[key] = value; continue; }
+      if (key === 'background') {
+        if (settings.background !== value) { settings.background = value; needsRender = true; }
+        continue;
+      }
       if (typeof value === 'number' && !Number.isFinite(value)) continue;
+      if (settings[key] === value) continue;
       settings[key] = value;
+      if (key === 'spacing' || key === 'maxParticles' || key === 'pixelRatioCap'
+        || key === 'baseAlpha' || key === 'alphaJitter') {
+        needsBuild = true;
+      } else if (key === 'dotRadius' || key === 'baseColor') {
+        needsSprites = true;
+      } else {
+        needsRender = true;
+      }
     }
-    resize();
+
+    if (needsBuild) { resize(); return; }
+    if (needsSprites) buildSprites();
+    if (needsSprites || needsRender) render();
   }
 
   // --- Event wiring ---------------------------------------------------
