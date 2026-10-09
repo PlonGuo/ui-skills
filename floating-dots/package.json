@@ -1,0 +1,10 @@
+{
+  "name": "floating-dots",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "check": "node --check app.js && node --check floating-dots-engine.js",
+    "test": "node tests/engine-smoke.mjs"
+  }
+}
