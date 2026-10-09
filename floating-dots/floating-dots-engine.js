@@ -71,6 +71,8 @@ export function mountFloatingDots(container, options = {}) {
   let previous = 0;
   let frames = 0;
   let running = false;
+  let visible = true;
+  const motionQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
 
   const ALPHA_TIERS = 8;
 
@@ -124,19 +126,22 @@ export function mountFloatingDots(container, options = {}) {
     advance(step);
     render();
     frames += 1;
-    frame = requestAnimationFrame(animate);
+    frame = window.requestAnimationFrame(animate);
   }
 
   function start() {
     if (disposed || running) return;
+    // Reduced motion means one static frame, never a running loop. The
+    // check lives here so every caller inherits it.
+    if (motionQuery.matches) { render(); return; }
     running = true;
     previous = 0;
-    frame = requestAnimationFrame(animate);
+    frame = window.requestAnimationFrame(animate);
   }
 
   function stop() {
     running = false;
-    if (frame) cancelAnimationFrame(frame);
+    if (frame) window.cancelAnimationFrame(frame);
     frame = 0;
     previous = 0;
   }
@@ -223,6 +228,14 @@ export function mountFloatingDots(container, options = {}) {
   function dispose() {
     if (disposed) return;
     disposed = true;
+    stop();
+    window.removeEventListener('pointermove', pointerMove);
+    window.removeEventListener('pointerleave', pointerOut);
+    window.removeEventListener('blur', pointerOut);
+    document.removeEventListener('visibilitychange', visibilityChange);
+    motionQuery.removeEventListener('change', reducedMotionChange);
+    resizeObserver.disconnect();
+    intersectionObserver.disconnect();
     if (canvas.parentNode === container) canvas.remove();
     points = [];
     sprites = [];
@@ -239,7 +252,60 @@ export function mountFloatingDots(container, options = {}) {
     resize();
   }
 
+  // --- Event wiring ---------------------------------------------------
+  // Every listener is registered on `window` or `document`, never on the
+  // canvas. The canvas sits under a content layer and is set to
+  // pointer-events:none, so it never receives pointer events at all;
+  // listening there would leave the field dead in exactly the
+  // configuration this effect is built for. Coordinates are translated
+  // from viewport space into container-local space here.
+
+  function pointerMove(event) {
+    const bounds = container.getBoundingClientRect();
+    pointer.x = event.clientX - bounds.left;
+    pointer.y = event.clientY - bounds.top;
+    pointer.active = true;
+    if (motionQuery.matches) render();
+  }
+
+  function pointerOut() {
+    pointer.active = false;
+    pointer.x = -10000;
+    pointer.y = -10000;
+    if (motionQuery.matches) render();
+  }
+
+  function visibilityChange() {
+    if (document.hidden) stop(); else start();
+  }
+
+  function reducedMotionChange() {
+    if (motionQuery.matches) { stop(); render(); } else { start(); }
+  }
+
+  function resizeObserverCallback() { resize(); render(); }
+
+  function intersectionCallback(entries) {
+    visible = entries[0].isIntersecting;
+    if (visible && !document.hidden) start(); else stop();
+  }
+
+  const resizeObserver = new ResizeObserver(resizeObserverCallback);
+  const intersectionObserver = new IntersectionObserver(intersectionCallback);
+
+  window.addEventListener('pointermove', pointerMove, { passive: true });
+  window.addEventListener('pointerleave', pointerOut, { passive: true });
+  window.addEventListener('blur', pointerOut);
+  document.addEventListener('visibilitychange', visibilityChange);
+  // AbortController could cover the DOM listeners above, but not a
+  // MediaQueryList, so every listener is removed explicitly instead —
+  // that also keeps removal verifiable in a plain DOM stub.
+  motionQuery.addEventListener('change', reducedMotionChange);
+  resizeObserver.observe(container);
+  intersectionObserver.observe(container);
+
   resize();
+  if (!document.hidden) start();
 
   return {
     canvas,
@@ -251,6 +317,7 @@ export function mountFloatingDots(container, options = {}) {
       height,
       frames,
       running,
+      pointer: { ...pointer },
       settings: { ...settings },
     }),
     debugPoints: () => points.map(({ x, y }) => ({ x, y })),
