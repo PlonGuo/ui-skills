@@ -66,6 +66,94 @@ export function mountFloatingDots(container, options = {}) {
   // tasks reuse these bindings rather than redeclaring them.
   const pointer = { x: -10000, y: -10000, active: false };
   let elapsed = 0;
+  let sprites = [];
+  let frame = 0;
+  let previous = 0;
+  let frames = 0;
+  let running = false;
+
+  const ALPHA_TIERS = 8;
+
+  /**
+   * Build one pre-rendered dot per alpha tier.
+   *
+   * Drawing ~2500 arcs per frame is too slow to hold 60fps, and setting
+   * globalAlpha per dot breaks canvas batching. Blitting from a small set
+   * of pre-rendered dots avoids both costs: the per-dot work in the draw
+   * loop becomes a plain drawImage with no state change.
+   */
+  function buildSprites() {
+    sprites = [];
+    const radius = Math.max(0.5, finiteOr(settings.dotRadius, DEFAULTS.dotRadius));
+    const pad = 2;
+    const size = Math.max(1, Math.ceil((radius * 2 + pad * 2) * ratio));
+    for (let tier = 0; tier < ALPHA_TIERS; tier += 1) {
+      const alpha = (tier + 1) / ALPHA_TIERS;
+      const sprite = document.createElement('canvas');
+      sprite.width = size;
+      sprite.height = size;
+      const spriteContext = sprite.getContext('2d');
+      spriteContext.setTransform(ratio, 0, 0, ratio, 0, 0);
+      spriteContext.fillStyle = `rgba(${settings.baseColor[0]}, ${settings.baseColor[1]}, ${settings.baseColor[2]}, ${alpha})`;
+      spriteContext.beginPath();
+      spriteContext.arc(radius + pad, radius + pad, radius, 0, Math.PI * 2);
+      spriteContext.fill();
+      sprites.push({ image: sprite, logicalSize: (radius + pad) * 2 });
+    }
+  }
+
+  function render() {
+    context.fillStyle = settings.background;
+    context.fillRect(0, 0, width, height);
+    if (!sprites.length) return;
+    for (const point of points) {
+      const tier = clamp(Math.round(point.alpha * ALPHA_TIERS) - 1, 0, ALPHA_TIERS - 1);
+      const sprite = sprites[tier];
+      const half = (sprite.logicalSize * point.size) / 2;
+      context.drawImage(sprite.image, point.x - half, point.y - half, half * 2, half * 2);
+    }
+  }
+
+  function animate(timestamp) {
+    frame = 0;
+    if (disposed || !running) return;
+    const dt = previous ? (timestamp - previous) / 1000 : 1 / 60;
+    previous = timestamp;
+    const step = Math.min(dt, 0.05);
+    elapsed += step;
+    advance(step);
+    render();
+    frames += 1;
+    frame = requestAnimationFrame(animate);
+  }
+
+  function start() {
+    if (disposed || running) return;
+    running = true;
+    previous = 0;
+    frame = requestAnimationFrame(animate);
+  }
+
+  function stop() {
+    running = false;
+    if (frame) cancelAnimationFrame(frame);
+    frame = 0;
+    previous = 0;
+  }
+
+  /** Step the simulation and draw once, without the frame loop. */
+  function advanceOnce(dt) {
+    if (disposed) return;
+    const step = Math.min(dt, 0.05);
+    elapsed += step;
+    advance(step);
+    render();
+    frames += 1;
+  }
+
+  function renderOnce() {
+    render();
+  }
 
   /** Advance the simulation by one step. Called by the frame loop. */
   function advance(dt) {
@@ -129,6 +217,7 @@ export function mountFloatingDots(container, options = {}) {
     canvas.height = Math.max(1, Math.round(height * ratio));
     context.setTransform(ratio, 0, 0, ratio, 0, 0);
     build();
+    buildSprites();
   }
 
   function dispose() {
@@ -136,6 +225,7 @@ export function mountFloatingDots(container, options = {}) {
     disposed = true;
     if (canvas.parentNode === container) canvas.remove();
     points = [];
+    sprites = [];
   }
 
   function setOptions(partial = {}) {
@@ -154,9 +244,21 @@ export function mountFloatingDots(container, options = {}) {
   return {
     canvas,
     ready: Promise.resolve(),
-    stats: () => ({ count: points.length, spacing: settings.spacing, width, height, settings: { ...settings } }),
+    stats: () => ({
+      count: points.length,
+      spacing: settings.spacing,
+      width,
+      height,
+      frames,
+      running,
+      settings: { ...settings },
+    }),
     debugPoints: () => points.map(({ x, y }) => ({ x, y })),
     setOptions,
+    start,
+    stop,
+    advanceOnce,
+    renderOnce,
     dispose,
   };
 }

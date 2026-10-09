@@ -123,4 +123,50 @@ opt.dispose();
 assert.throws(() => mountFloatingDots(null), TypeError, 'null container should throw TypeError');
 assert.throws(() => mountFloatingDots({}), TypeError, 'non-HTMLElement container should throw TypeError');
 
+// --- Task 4: rendering uses pre-rendered sprites via drawImage ---
+{
+  const drawCalls = { drawImage: 0, arc: 0, globalAlphaSets: 0 };
+  const probe = makeStubContainer(600, 400);
+  const originalCreate = globalThis.document.createElement;
+  globalThis.document.createElement = function (tag) {
+    const node = originalCreate.call(globalThis.document, tag);
+    if (tag === 'canvas') {
+      node.getContext = () => ({
+        setTransform() {}, clearRect() {}, fillRect() {},
+        drawImage() { drawCalls.drawImage += 1; },
+        arc() { drawCalls.arc += 1; },
+        beginPath() {}, fill() {}, save() {}, restore() {},
+        set globalAlpha(v) { drawCalls.globalAlphaSets += 1; },
+        get globalAlpha() { return 1; },
+        fillStyle: '', createRadialGradient: () => ({ addColorStop() {} }),
+      });
+    }
+    return node;
+  };
+  const spriteEffect = mountFloatingDots(probe);
+  await spriteEffect.ready;
+  // Building the sprites legitimately uses arc() once per tier. Reset the
+  // counters so the assertions below measure the per-frame draw pass only.
+  drawCalls.drawImage = 0;
+  drawCalls.arc = 0;
+  drawCalls.globalAlphaSets = 0;
+  spriteEffect.renderOnce();
+  assert.ok(drawCalls.drawImage > 50, `expected sprite blits, saw ${drawCalls.drawImage}`);
+  assert.equal(drawCalls.arc, 0, 'per-dot arc() is too slow at this density; use sprites');
+  assert.equal(drawCalls.globalAlphaSets, 0, 'per-dot globalAlpha breaks batching; use alpha-tier sprites');
+  spriteEffect.dispose();
+  globalThis.document.createElement = originalCreate;
+}
+
+// --- Task 4: the frame loop advances the simulation ---
+{
+  const loopEffect = mountFloatingDots(makeStubContainer(600, 400));
+  await loopEffect.ready;
+  const framesBefore = loopEffect.stats().frames;
+  loopEffect.advanceOnce(1 / 60);
+  loopEffect.advanceOnce(1 / 60);
+  assert.equal(loopEffect.stats().frames, framesBefore + 2, 'advanceOnce should count frames');
+  loopEffect.dispose();
+}
+
 console.log('PASS engine-smoke', { canvasesCreated: created.length });
