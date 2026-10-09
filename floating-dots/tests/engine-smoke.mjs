@@ -78,7 +78,7 @@ await effect.ready;
 const exposed = effect.stats().settings;
 assert.equal(typeof exposed, 'object', 'stats() must expose the resolved settings');
 assert.equal(exposed.spacing, 34, 'exposed settings should carry the resolved spacing');
-assert.equal(exposed.noiseScale, 0.0022, 'exposed settings should carry the resolved noise scale');
+assert.equal(exposed.noiseScale, 0.0006, 'exposed settings should carry the resolved noise scale');
 assert.notEqual(exposed, effect.stats().settings, 'settings should be copied, not handed out by reference');
 
 // --- Review Focus #3: double dispose and dispose-after-mount ---

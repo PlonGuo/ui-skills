@@ -5,6 +5,8 @@
  * without site bundles, third-party libraries, fonts or image assets.
  */
 
+import { stepPoints } from './motion.js';
+
 const DEFAULTS = {
   background: '#191b1f',
   spacing: 34,
@@ -13,14 +15,17 @@ const DEFAULTS = {
   baseAlpha: 0.37,
   alphaJitter: 0.15,
   driftSpeed: 9,
-  // The two scales below are a coherent pair and must stay well above
-  // the reciprocal of `spacing`. Wavelength is 1/scale, so noiseScale
-  // 0.0022 is a ~455px swell and detailScale 0.006 is a ~167px ripple —
-  // roughly 13x and 5x the 34px dot spacing. A detail wavelength near
-  // the spacing would give neighbouring dots unrelated directions, which
-  // is the dust-in-air look, not water.
-  noiseScale: 0.0022,
-  detailScale: 0.006,
+  // The two scales below are a coherent pair: the flow direction must not
+  // turn sharply over one grid step, or neighbouring dots stop agreeing
+  // and the field reads as visual static instead of water. Wavelength is
+  // 1/scale, so noiseScale 0.0006 is a ~1670px swell and detailScale
+  // 0.0015 is a ~670px ripple. Measured over the 34px spacing these give
+  // at most ~35 degrees of turn per step, comfortably inside the 60 degree
+  // test bound, while still varying ~125 degrees across 200px so large
+  // swirls stay visible. Raising either scale shortens wavelengths and
+  // pushes the field toward noise.
+  noiseScale: 0.0006,
+  detailScale: 0.0015,
   detailWeight: 0.4,
   homeStiffness: 1.6,
   damping: 2.4,
@@ -56,6 +61,31 @@ export function mountFloatingDots(container, options = {}) {
   let ratio = 1;
   let points = [];
   let disposed = false;
+
+  // Shared with the motion and event layers. Declared once here; later
+  // tasks reuse these bindings rather than redeclaring them.
+  const pointer = { x: -10000, y: -10000, active: false };
+  let elapsed = 0;
+
+  /** Advance the simulation by one step. Called by the frame loop. */
+  function advance(dt) {
+    if (disposed) return;
+    stepPoints(points, {
+      width,
+      height,
+      time: elapsed,
+      driftSpeed: finiteOr(settings.driftSpeed, DEFAULTS.driftSpeed),
+      noiseScale: finiteOr(settings.noiseScale, DEFAULTS.noiseScale),
+      detailScale: finiteOr(settings.detailScale, DEFAULTS.detailScale),
+      detailWeight: finiteOr(settings.detailWeight, DEFAULTS.detailWeight),
+      homeStiffness: finiteOr(settings.homeStiffness, DEFAULTS.homeStiffness),
+      damping: finiteOr(settings.damping, DEFAULTS.damping),
+      repelRadius: finiteOr(settings.repelRadius, DEFAULTS.repelRadius),
+      repelStrength: finiteOr(settings.repelStrength, DEFAULTS.repelStrength),
+      maxSpeed: finiteOr(settings.maxSpeed, DEFAULTS.maxSpeed),
+      pointer,
+    }, dt);
+  }
 
   function build() {
     const spacing = Math.max(1, finiteOr(settings.spacing, DEFAULTS.spacing));
