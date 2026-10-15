@@ -1,0 +1,16 @@
+{
+  "name": "tilting-photo-wall",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "node server.mjs",
+    "start": "node server.mjs",
+    "check": "node --check app.js && node --check photo-wall-engine.js && node --check server.mjs",
+    "test": "node tests/engine-contract.mjs && node tests/geometry.mjs",
+    "test:browser": "bash tests/run-browser-check.sh"
+  },
+  "devDependencies": {
+    "playwright-core": "^1.64.0"
+  }
+}

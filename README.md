@@ -9,6 +9,7 @@
 | 图形变换粒子背景 | [Morphing particles](morphing-particles/README.md) | [Skill](morphing-particles/skills/morphing-particles/SKILL.md) |
 | 深色点阵背景 | [Dot grid background](dot-grid-background/README.md) | [Skill](dot-grid-background/skills/dot-grid-background/SKILL.md) |
 | 蓝色漂浮粒子环 | [Floating dots](floating-dots/README.md) | 独立 demo |
+| 倾斜照片墙 | [Tilting photo wall](tilting-photo-wall/README.md) | [Skill](tilting-photo-wall/skills/tilting-photo-wall/SKILL.md) |
 
 ## 运行
 
@@ -21,11 +22,15 @@ pnpm dev
 
 漂浮粒子 demo：在仓库根目录执行 `cd floating-dots`，再运行 `pnpm dev`。调参界面位于 `/?tune=1`，完整启动和测试说明见 [Floating dots](floating-dots/README.md)。
 
+倾斜照片墙 demo：执行 `cd tilting-photo-wall`，再运行 `pnpm dev`。说明见 [Tilting photo wall](tilting-photo-wall/README.md)。
+
 ## 复用
 
 将 `morphing-particles/skills/morphing-particles` 复制到目标项目的 `.agents/skills/morphing-particles`，然后调用 `$morphing-particles`。
 
 将 `dot-grid-background/skills/dot-grid-background` 复制到目标项目的 `.agents/skills/dot-grid-background`，然后调用 `$dot-grid-background`。该 skill 提供独立预览模板和可挂载的 `mountDotGridBackground()` runtime 模块。
+
+将 `tilting-photo-wall/skills/tilting-photo-wall` 复制到目标项目的 `.agents/skills/tilting-photo-wall`，然后调用 `$tilting-photo-wall`。该 skill 提供倾斜照片墙预览、`mountPhotoWall()` 运行模块和接入说明，模板使用本地生成的 SVG 示例图，接入时替换为项目照片。
 
 技能包含独立页面模板、可显式挂载和卸载的粒子引擎、实现原理、参数说明和参考截图。默认图形由公式生成，不需要 PNG、外部字体、Three.js 或 GSAP。
 

@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="800" height="600" viewBox="0 0 800 600">
+<defs><linearGradient id="sky" x2="0.8" y2="1"><stop stop-color="#2f111b"/><stop offset="1" stop-color="#8d383d"/></linearGradient><linearGradient id="land" x2="0" y2="1"><stop stop-color="#f5a569"/><stop offset="1" stop-color="#8d383d"/></linearGradient></defs>
+<rect width="800" height="600" fill="url(#sky)"/>
+<circle cx="332" cy="106" r="88" fill="#f5a569" opacity=".85"/>
+<path d="M0 400 Q160 180 330 350 T800 280 V600 H0Z" fill="#8d383d"/>
+<path d="M0 500 Q220 240 480 410 T800 350 V600 H0Z" fill="url(#land)"/>
+<path d="M-40 555 Q240 390 520 505 T850 460" fill="none" stroke="#f5a569" stroke-width="3" opacity=".6"/>
+<text x="44" y="68" fill="#f5a569" font-family="sans-serif" font-size="18" letter-spacing="5">STUDY / 14</text>
+</svg>

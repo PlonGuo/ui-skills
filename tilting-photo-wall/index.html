@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#000000" />
+    <meta name="description" content="A wall of photo cards on black, drifting in a slow rotation you can accelerate with the wheel." />
+    <title>Tilting photo wall</title>
+    <link rel="icon" href="data:," />
+    <link rel="stylesheet" href="./styles.css" />
+    <script type="module" src="./app.js"></script>
+  </head>
+  <body>
+    <main class="wall-stage" id="stage">
+      <div class="wall-canvas-host" id="wall"></div>
+      <nav class="notes" id="notes" aria-label="Demo controls">
+        <span class="notes__title">Tilting photo wall</span>
+        <span class="notes__hint">Wheel or trackpad to spin it faster</span>
+        <button class="notes__toggle" id="notes-toggle" type="button" aria-expanded="false">Show notes</button>
+      </nav>
+    </main>
+  </body>
+</html>

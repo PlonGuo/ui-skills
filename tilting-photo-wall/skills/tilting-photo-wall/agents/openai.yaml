@@ -1,0 +1,4 @@
+interface:
+  display_name: "倾斜照片墙"
+  short_description: "复用黑底三维螺旋照片墙，支持透视圆角、循环播放与滚动惯性"
+  default_prompt: "使用 $tilting-photo-wall，在当前项目中加入倾斜照片墙，保持斜向构图和向下滚动加速的交互。"
