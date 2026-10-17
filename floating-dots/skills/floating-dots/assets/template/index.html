@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#000000" />
+    <meta name="description" content="An interactive blue particle field with a floating ring that follows your pointer." />
+    <title>Floating dots</title>
+    <link rel="icon" href="data:," />
+    <link rel="preload" href="./assets/google-sans-flex-latin.woff2" as="font" type="font/woff2" crossorigin />
+    <link rel="stylesheet" href="./styles.css" />
+    <script type="module" src="./app.js"></script>
+  </head>
+  <body>
+    <main class="download-section">
+      <div class="backdrop" id="backdrop" aria-hidden="true"></div>
+      <div class="overlay">
+        <h1 class="title">Ideas in motion<br />Made to flow<span class="cursor" aria-hidden="true"></span></h1>
+        <div class="actions">
+          <a class="button button-primary" id="demo-action" href="#backdrop">Explore the motion</a>
+          <a class="button button-secondary" href="?tune=1">Customize the effect</a>
+        </div>
+      </div>
+    </main>
+  </body>
+</html>

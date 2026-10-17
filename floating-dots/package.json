@@ -8,7 +8,8 @@
     "start": "node server.mjs",
     "check": "node --check app.js && node --check floating-dots-engine.js && node --check noise-field.js && node --check motion.js && node --check server.mjs",
     "test": "node tests/engine-smoke.mjs && node tests/noise-field.mjs && node tests/simplex.mjs && node tests/motion.mjs && node tests/engine-lifecycle.mjs",
-    "test:browser": "./tests/run-browser-check.sh"
+    "test:browser": "bash tests/run-browser-check.sh",
+    "test:skill": "node tests/skill-package.mjs"
   },
   "devDependencies": {
     "playwright-core": "^1.64.0"

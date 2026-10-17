@@ -1,0 +1,4 @@
+interface:
+  display_name: "蓝色漂浮粒子环"
+  short_description: "复用黑底蓝色短线粒子环，支持指针跟随、呼吸运动、独立预览和已有页面接入"
+  default_prompt: "使用 $floating-dots，在当前项目中加入蓝色漂浮粒子环，沿用现有布局并验证指针跟随和减少动画模式。"

@@ -11,8 +11,8 @@ window.addEventListener('pagehide', event => {
 window.__floatingDotsStats = () => effect.stats();
 
 // --- Tuning panel -----------------------------------------------------
-// An audit tool only. It renders behind ?tune=1 and is deliberately kept
-// out of the skill template. Drag the sliders to find the feel, then use
+// A standalone preview tool behind ?tune=1, excluded from runtime output.
+// Drag the sliders to find the feel, then use
 // "Copy current parameters" and hand the values over to be fixed as
 // defaults.
 if (new URLSearchParams(location.search).has('tune')) {

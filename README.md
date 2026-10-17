@@ -8,10 +8,81 @@
 | --- | --- | --- |
 | 图形变换粒子背景 | [Morphing particles](morphing-particles/README.md) | [Skill](morphing-particles/skills/morphing-particles/SKILL.md) |
 | 深色点阵背景 | [Dot grid background](dot-grid-background/README.md) | [Skill](dot-grid-background/skills/dot-grid-background/SKILL.md) |
-| 蓝色漂浮粒子环 | [Floating dots](floating-dots/README.md) | 独立 demo |
+| 蓝色漂浮粒子环 | [Floating dots](floating-dots/README.md) | [Skill](floating-dots/skills/floating-dots/SKILL.md) |
 | 倾斜照片墙 | [Tilting photo wall](tilting-photo-wall/README.md) | [Skill](tilting-photo-wall/skills/tilting-photo-wall/SKILL.md) |
 
-## 运行
+## 如何使用 Skills
+
+每个 skill 都能指导 AI 编程 agent 把对应 UI 效果接入你的项目。可以把它理解成“接入说明＋实现零件”的完整包：所需代码已经放在 skill 内，无需额外复制外层 demo 源码，也无需搬入整个 UI 项目。
+
+### 1. 选择效果，复制完整 skill 文件夹
+
+下面以目标项目的 `.agents/skills/` 为技能目录：
+
+| 效果 | 本仓库中需要复制的文件夹 | 目标项目中的位置 | 调用名称 |
+| --- | --- | --- | --- |
+| 图形变换粒子 | `morphing-particles/skills/morphing-particles/` | `.agents/skills/morphing-particles/` | `$morphing-particles` |
+| 深色点阵 | `dot-grid-background/skills/dot-grid-background/` | `.agents/skills/dot-grid-background/` | `$dot-grid-background` |
+| 蓝色漂浮粒子环 | `floating-dots/skills/floating-dots/` | `.agents/skills/floating-dots/` | `$floating-dots` |
+| 倾斜照片墙 | `tilting-photo-wall/skills/tilting-photo-wall/` | `.agents/skills/tilting-photo-wall/` | `$tilting-photo-wall` |
+
+例如，在本仓库根目录执行以下命令，把 `/path/to/your-project` 替换成你的目标项目路径：
+
+```sh
+mkdir -p /path/to/your-project/.agents/skills
+cp -R floating-dots/skills/floating-dots /path/to/your-project/.agents/skills/
+```
+
+目标目录中应保留完整内容，例如：
+
+```text
+your-project/.agents/skills/floating-dots/
+├── SKILL.md
+├── agents/
+├── scripts/
+├── references/
+├── assets/
+│   └── template/    # 已包含效果实现代码、页面模板和所需资源
+├── LICENSE
+└── NOTICE.md
+```
+
+**只复制 `SKILL.md` 会缺少代码和资源；`assets/template/` 里的代码需要保留，但外层 demo 的源码不用再复制一份。** `scripts/`、`references/` 和其他随附文件也一起保留。
+
+使用其他 agent 时，将同一个完整文件夹放到它支持的技能目录，并按该 agent 的方式加载。如果当前会话没有发现新技能，刷新技能列表或新建会话后再调用。
+
+### 2. 在目标项目中让 agent 接入 UI
+
+安装 skill 后还需要发出接入指令，页面才会加入效果。例如：
+
+```text
+使用 $floating-dots，在当前首页加入蓝色漂浮粒子环。
+使用技能附带的实现，沿用项目现有框架、布局、文案和字体。
+完成接入并检查桌面、手机、鼠标跟随、按钮点击和减少动画模式。
+```
+
+使用其他效果时，将 `$floating-dots` 替换成表中对应的技能名称，并说明要放在哪个页面或组件中。照片墙的 skill 附带 SVG 示例图；要展示实际照片，需要提供项目自己的图片或图片路径。
+
+### 3. 按需求选择接入已有项目或生成独立预览
+
+- **接入已有项目**：让 agent 使用 `runtime` 模式，只生成效果运行模块，再按目标框架挂载、设置容器尺寸并在卸载时清理。沿用宿主布局，避免独立页全局样式覆盖现有页面。
+- **独立预览**：让 agent 使用 `standalone` 模式，生成完整展示页，用于先看效果和调参。
+
+也可以直接运行 skill 内的生成脚本，以 floating-dots 为例，在目标项目根目录执行：
+
+```sh
+# 生成运行模块；之后仍需按 skill 的接入说明挂到页面中
+python3 .agents/skills/floating-dots/scripts/materialize.py --destination src/effects/floating-dots --mode runtime
+
+# 或生成完整独立预览
+python3 .agents/skills/floating-dots/scripts/materialize.py --destination previews/floating-dots --mode standalone
+```
+
+脚本要求输出目录尚不存在，避免覆盖已有文件。floating-dots 独立预览可在生成目录运行 `pnpm dev`，无需先安装依赖；浏览器测试依赖和检查方式见各 skill 的说明。各效果的具体输出、图片需求与交互约束以对应 `SKILL.md` 为准。
+
+## 运行仓库中的 Demo
+
+想先查看效果，可以直接运行外层展示项目：
 
 ```sh
 cd morphing-particles
@@ -24,15 +95,7 @@ pnpm dev
 
 倾斜照片墙 demo：执行 `cd tilting-photo-wall`，再运行 `pnpm dev`。说明见 [Tilting photo wall](tilting-photo-wall/README.md)。
 
-## 复用
-
-将 `morphing-particles/skills/morphing-particles` 复制到目标项目的 `.agents/skills/morphing-particles`，然后调用 `$morphing-particles`。
-
-将 `dot-grid-background/skills/dot-grid-background` 复制到目标项目的 `.agents/skills/dot-grid-background`，然后调用 `$dot-grid-background`。该 skill 提供独立预览模板和可挂载的 `mountDotGridBackground()` runtime 模块。
-
-将 `tilting-photo-wall/skills/tilting-photo-wall` 复制到目标项目的 `.agents/skills/tilting-photo-wall`，然后调用 `$tilting-photo-wall`。该 skill 提供倾斜照片墙预览、`mountPhotoWall()` 运行模块和接入说明，模板使用本地生成的 SVG 示例图，接入时替换为项目照片。
-
-技能包含独立页面模板、可显式挂载和卸载的粒子引擎、实现原理、参数说明和参考截图。默认图形由公式生成，不需要 PNG、外部字体、Three.js 或 GSAP。
+深色点阵 demo：在仓库根目录执行 `cd dot-grid-background`，再运行 `python3 -m http.server 4321`。说明见 [Dot grid background](dot-grid-background/README.md)。
 
 ## 来源与许可证
 
